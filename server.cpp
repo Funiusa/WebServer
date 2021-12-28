@@ -1,23 +1,16 @@
-
-#include <sstream>
 #include "server.hpp"
-#include "request.hpp"
 #include "Response.hpp"
-
-#define MAX_CONNECTION 1000
+#include "Request.hpp"
 
 Server::Server(int port)
-: _rc(1),_listenSD(-1), _port(port), _nfds(1), _endServer(FALSE),
-_currentSize(0), _newSd(-1), _compressArray(FALSE) {
+: _rc(1), _aindex(0), _listenSD(-1), _port(port), _nfds(1), _endServer(FALSE),
+_currentSize(0), _newSd(-1), _compressArray(FALSE), _closeConnection(FALSE) {
 
 }
 
 Server::Server()
-: _rc(1),_listenSD(-1), _port(8080), _nfds(1), _endServer(FALSE),
-			_currentSize(0), _newSd(-1), _compressArray(FALSE) {
-}
-
-Server::~Server() {
+: _rc(1), _aindex(0), _listenSD(-1), _port(8080), _nfds(1), _endServer(FALSE),
+  _currentSize(0), _newSd(-1), _compressArray(FALSE), _closeConnection(FALSE) {
 
 }
 
@@ -30,17 +23,25 @@ void Server::setListenSd(int sd) {
 	this->_listenSD = sd;
 }
 
+void Server::setAutoindex(int val) {
+	this->_aindex = val;
+}
+
+int Server::getAutoindex() {
+	return this->_aindex;
+}
+
 /*************************************************************/
 /* Initialize the pollfd structure                           */
 /* Set up the initial listening socket                  	 */
-/* pollfd structure                                  */
+/* pollfd structure                                  		 */
 /*************************************************************/
 void Server::pollInit() {
 
-	memset(this->_fds, 0 , sizeof(this->_fds));
-	this->_fds[0].fd = this->_listenSD;
-	this->_fds[0].events = POLLIN;
-	_timeout = (3 * 60 * 1000);
+	memset(_fds, 0 , sizeof(_fds));
+	_fds[0].fd = _listenSD;
+	_fds[0].events = POLLIN;
+	_timeout = (3 * 60 * 100000);
 
 }
 /***********************************************************/
@@ -53,18 +54,15 @@ void Server::pollInit() {
 /***********************************************************/
 void Server::pollWait() {
 
-
-	this->_rc = poll(this->_fds, this->_nfds, _timeout);
 	std::cout << "Waiting on poll()..." << std::endl;
+	_rc = poll(_fds, _nfds, this->_timeout);
 	if (this->_rc < 0) {
-		myErrorException("poll() failed");
+		throw myErrorException("poll() failed");
 	}
 	if (this->_rc == 0) {
-		myErrorException("poll() timed out.  End program.");
+		throw myErrorException("poll() timed out.  End program.");
 	}
 }
-
-
 
 /*****************************************************/
 /* Accept each incoming connection. If               */
@@ -92,9 +90,9 @@ int Server::acceptIncomingConnections() {
 void Server::addNewIncomingConnection() {
 
 	std::cout << "  New incoming connection - " << this->_newSd << std::endl;
-	this->_fds[this->_nfds].fd = this->_newSd;
-	this->_fds[this->_nfds].events = POLLIN;
-	this->_nfds++;
+	_fds[_nfds].fd =_newSd;
+	_fds[_nfds].events = POLLIN;
+	_nfds++;
 }
 
 /*************************************************************/
@@ -102,6 +100,7 @@ void Server::addNewIncomingConnection() {
 /* on any of the connected sockets.                          */
 /*************************************************************/
 void Server::start() {
+
 	do {
 		pollWait();
 		/***********************************************************/
@@ -109,27 +108,42 @@ void Server::start() {
 		/* determine which ones they are.                          */
 		/***********************************************************/
 		this->_currentSize = this->_nfds;
-
 		/*********************************************************/
 		/* Loop through to find the descriptors that returned    */
 		/* POLLIN and determine whether it's the listening       */
 		/* or the active connection.                             */
 		/*********************************************************/
 		for (int i = 0; i < this->_currentSize; i++) {
-			fcntl(this->_fds[i].fd, F_SETFL, O_NONBLOCK);
-			if (this->_fds[i].revents == 0)
+
+//			fcntl(_fds[i].fd, F_SETFL, O_NONBLOCK);
+			if (_fds[i].revents == 0)
 				continue;
 			/*********************************************************/
 			/* If revents is not POLLIN, it's an unexpected result,  */
 			/* log and end the server.                               */
 			/*********************************************************/
-			if (this->_fds[i].revents != POLLIN) {
-				std::cout << "Revents " << this->_fds[i].revents << std::endl;
-				this->_endServer = TRUE;
-				std::cout << "Error revents" << std::endl;
+			if (_fds[i].revents != POLLIN) {
+				std::cout << "Revents " << _fds[i].revents << std::endl;
+//				if (_fds[i].revents == POLLOUT) {
+//					break;
+//				}
+				close(_fds[i].fd);
+				_fds[i].fd = -1;
+				_endServer = TRUE;
+				break ;
+//				else if (_fds[i].revents == POLLERR) {
+//					this->_endServer = TRUE;
+//					std::cout << "Error revents" << std::endl;
+//					break;
+//				}
+			}
+			if (fcntl(_fds[i].fd, F_SETFL, O_NONBLOCK) < 0) {
+				close(_fds[i].fd);
+				_fds[i].fd = -1;
 				break ;
 			}
-			if (this->_fds[i].fd == this->_listenSD) {
+
+			if (_fds[i].fd == _listenSD) {
 				/*******************************************************/
 				/* Listening descriptor is readable.                   */
 				/*******************************************************/
@@ -148,7 +162,8 @@ void Server::start() {
 					/* Loop back up and accept another incoming          */
 					/* connection                                        */
 					/*****************************************************/
-				} while (this->_newSd != -1);
+				} while (_newSd != -1);
+
 			}
 
 			/*********************************************************/
@@ -156,26 +171,56 @@ void Server::start() {
 			/* existing connection must be readable                  */
 			/*********************************************************/
 			else {
-				std::cout << "Descriptor " << this->_fds[i].fd << " is readable" << std::endl;
+				std::cout << "Descriptor " << _fds[i].fd << " is readable" << std::endl;
 				this->_closeConnection = FALSE;
 				/*******************************************************/
 				/* Receive all incoming data on this socket            */
 				/* before we loop back and call poll again.            */
 				/*******************************************************/
 				do {
+					/*****************************************************/
+					/* Receive data on this connection until the         */
+					/* recv fails with EWOULDBLOCK. If any other         */
+					/* failure occurs, we will close the                 */
+					/* connection.                                       */
+					/*****************************************************/
 					Request req;
-					if (req.receiveDate(this->_fds[i].fd))
-						break ;
+					int rc = req.receiveDate(_fds[i].fd);
+					if (rc <= 0) {
+						if (errno != EWOULDBLOCK) {
+							std::cout << "  recv() failed" << std::endl;
+						} else if (rc == 0) {
+							std::cout << "Connection closed" << std::endl;
+						}
+						this->_closeConnection = TRUE;
+						break;
+					}
 					req.readRequest();
+
 					std::cout << "Type: " << req.get_type() << "; Uri: " << req.get_uri() << std::endl;
+
 
 					/*****************************************************/
 					/* Echo the data back to the client                  */
 					/*****************************************************/
 					Response resp;
-					resp.getHtmlData(req.get_uri());
-					if (resp.sandResponse(this->_fds[i].fd))
-						break ;
+//					setPath(getPath().append(req.get_uri()));
+					resp.setLocation(this->_location);
+					if (this->_aindex
+					&& resp.createAutoindexResponse(req.get_uri()) != 1) {
+						std::cout << "Uri dir: " << req.get_uri() << std::endl;
+					}
+					else
+						resp.getHtmlData(req.get_uri());
+//					if (rc == 0) {
+//						std::cout << "Connection closed" << std::endl;
+//						_closeConnection = TRUE;
+//						break;
+//					}
+					if (resp.sendResponse(_fds[i].fd)) {
+						this->_closeConnection = TRUE;
+						break;
+					}
 
 				} while (TRUE);
 				/*******************************************************/
@@ -185,12 +230,16 @@ void Server::start() {
 				/* descriptor.                                         */
 				/*******************************************************/
 				if (this->_closeConnection) {
-					closeConnection(this->_fds[i].fd);
+					close(this->_fds[i].fd);
+					this->_fds[i].fd = -1;
+					this->_compressArray = TRUE;
+//					closeConnection(this->_fds[i].fd);
 				}
+
 			} /* End of existing connection is readable             */
 
-		} /* End of loop through pollable descriptors              */
 
+		} /* End of loop through pollable descriptors              */
 
 		/***********************************************************/
 		/* If the compress_array flag was turned on, we need       */
@@ -238,6 +287,14 @@ void Server::cleanUpAllOpenSockets() {
 		if (this->_fds[i].fd >= 0)
 			close(this->_fds[i].fd);
 	}
+}
+
+void Server::setLocation(const std::string &location) {
+	this->_location = location;
+}
+
+std::string Server::getLocation() const {
+	return _location;
 }
 
 const char *Server::myErrorException::what() const throw() {

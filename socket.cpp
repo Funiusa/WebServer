@@ -7,9 +7,9 @@
 /* connections on                                            */
 /*************************************************************/
 void Socket::createSocketDescriptor() {
-	this->_sockSD = socket(AF_INET, SOCK_STREAM | O_NONBLOCK, 0);
+	this->_sockSD = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (this->_sockSD == 0)
-		Server::myErrorException("Creation socket description is failed");
+		throw Server::myErrorException("Creation socket description is failed");
 	else
 		std::cout << "Socket create" << std::endl;
 }
@@ -22,7 +22,7 @@ void Socket::setSockOpt() {
 	if (setsockopt(this->_sockSD, SOL_SOCKET,  SO_REUSEADDR,
 					&this->_optVal, sizeof(this->_optVal)) < 0)  {
 		close(this->_sockSD);
-		Server::myErrorException("Socket options failed");
+		throw Server::myErrorException("Socket options failed");
 	}
 }
 
@@ -35,7 +35,8 @@ void Socket::nonBlockSocket() {
 
 	if (fcntl(this->_sockSD, F_SETFL, O_NONBLOCK) < 0) {
 		close(this->_sockSD);
-		Server::myErrorException("fcntl() failed");
+		this->_sockSD = -1;
+		throw Server::myErrorException("fcntl() failed");
 	}
 }
 
@@ -46,10 +47,11 @@ void Socket::socketBind(int serverPort) {
 	memset(&this->_addr.sin_zero, 0, sizeof(this->_addr.sin_zero));
 	this->_addr.sin_family      = AF_INET;
 	this->_addr.sin_addr.s_addr = INADDR_ANY;
+	memcpy(&this->_addr.sin_addr, &this->_addr.sin_addr.s_addr, sizeof(this->_addr.sin_addr.s_addr));
 	this->_addr.sin_port        = htons(serverPort);
 	if (bind(this->_sockSD, (struct sockaddr *)&this->_addr, sizeof(this->_addr)) < 0) {
 		close(this->_sockSD);
-		Server::myErrorException("bind socket failed");
+		throw Server::myErrorException("bind socket failed");
 	}
 	else
 		std::cout << "Socket bind" << std::endl;
@@ -62,7 +64,7 @@ void Socket::socketBind(int serverPort) {
 void Socket::socketListener() {
 	if (listen(this->_sockSD, MAX_CONNECTIONS) < 0) {
 		close(this->_sockSD);
-		Server::myErrorException("listen socket failed");
+		throw Server::myErrorException("listen socket failed");
 	}
 
 }
@@ -71,7 +73,7 @@ Socket::Socket() : _sockSD(-1), _optVal(1), _addr() {
 	try {
 		createSocketDescriptor();
 		setSockOpt();
-		nonBlockSocket();
+//		nonBlockSocket();
 		socketBind(8080);
 		socketListener();
 	}

@@ -3,7 +3,7 @@ NAME = webserver
 CXX =		clang++
 CXXFLAGS =	-Wall -Wextra -Werror -std=c++98
 
-SRC_FILES =	main.cpp server.cpp socket.cpp Response.cpp request.cpp
+SRC_FILES =	main.cpp server.cpp socket.cpp Response.cpp Request.cpp
 
 SRCS = $(SRC_FILES)
 OBJS = $(SRCS:.cpp=.o)

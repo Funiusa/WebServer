@@ -3,4 +3,4 @@ project(webserver)
 
 set(CMAKE_CXX_STANDARD 98)
 
-add_executable(webserver main.cpp server.cpp request.cpp Response.cpp socket.cpp)
+add_executable(webserver main.cpp server.cpp Request.cpp Response.cpp socket.cpp )
