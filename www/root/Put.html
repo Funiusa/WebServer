@@ -1,0 +1,51 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+        "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+
+    <meta charset="UTF-8">
+    <title>File(s) size</title>
+    <script>
+        function updateSize() {
+            var nBytes = 0,
+                oFiles = document.getElementById("uploadInput").files,
+                nFiles = oFiles.length;
+            for (var nFileId = 0; nFileId < nFiles; nFileId++) {
+                nBytes += oFiles[nFileId].size;
+            }
+            var sOutput = nBytes + " bytes";
+            // optional code for multiples approximation
+            for (var aMultiples = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"], nMultiple = 0, nApprox = nBytes / 1024; nApprox > 1; nApprox /= 1024, nMultiple++) {
+                sOutput = nApprox.toFixed(3) + " " + aMultiples[nMultiple] + " (" + nBytes + " bytes)";
+            }
+            // end of optional code
+            document.getElementById("fileNum").innerHTML = nFiles;
+            document.getElementById("fileSize").innerHTML = sOutput;
+        }
+    </script>
+</head>
+
+<body onload="updateSize();">
+<FORM ENCTYPE="multipart/form-data" action="http://0.0.0.0:8000" method="put">
+    File to process: <INPUT NAME="userfile" TYPE="file">
+
+    <INPUT TYPE="submit" VALUE="Send File">
+
+</FORM>
+
+
+<form action="http://0.0.0.0:8000" method="post">
+    <div>
+        <label for="say">What greeting do you want to say?</label>
+        <input name="say" id="say" value="Hi">
+    </div>
+    <div>
+        <label for="to">Who do you want to say it to?</label>
+        <input name="to" id="to" value="Mom">
+    </div>
+    <div>
+        <button>Send my greetings</button>
+    </div>
+</form>
+</body>
+</html>
